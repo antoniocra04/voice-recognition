@@ -1,28 +1,64 @@
-// src/App.js или соответствующий файл вашего компонента
+// src/components/MainPage.js
 
 'use client';
 
-import React, { useCallback, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { motion } from 'framer-motion';
 import { Mic, MicOff, Trash2 } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Progress } from '@/components/ui/progress';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue
+} from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
 
 // Импорт сгенерированных gRPC файлов
-import { RecognitionServiceClient } from './grpc/recognition_grpc_web_pb';
-import { RecognitionConfig, StreamingRecognitionRequest } from './grpc/recognition_pb';
+import { RecognitionServiceClient } from '../../grpc/recognition_grpc_web_pb';
+import * as recognition_pb from '../../grpc/recognition_pb.js';
+
+const { StreamingRecognitionRequest, RecognitionConfig } = recognition_pb;
 
 export const MainPage = () => {
   const [isRecording, setIsRecording] = useState(false);
   const [transcript, setTranscript] = useState('');
   const [progress, setProgress] = useState(0);
+  const [models, setModels] = useState([]);
+  const [selectedModel, setSelectedModel] = useState('');
   const timerRef = useRef(null);
   const mediaRecorderRef = useRef(null);
   const recognitionClientRef = useRef(null);
   const streamRef = useRef(null);
+
+  // Функция для получения списка поддерживаемых моделей
+  const fetchSupportedModels = useCallback(() => {
+    const client = new RecognitionServiceClient('http://localhost:8080', null, null);
+    const request = new Empty();
+
+    client.getSupportedModelsInfo(request, {}, (err, response) => {
+      if (err) {
+        console.error('Ошибка при получении моделей:', err);
+        return;
+      }
+      const modelsList = response.getModelsList().map((model) => ({
+        name: model.getName(),
+        description: model.getDescription()
+      }));
+      setModels(modelsList);
+      if (modelsList.length > 0) {
+        setSelectedModel(modelsList[0].name); // Установить первую модель по умолчанию
+      }
+    });
+  }, []);
+
+  useEffect(() => {
+    fetchSupportedModels();
+  }, [fetchSupportedModels]);
 
   const stopRecording = useCallback(() => {
     setIsRecording(false);
@@ -38,6 +74,11 @@ export const MainPage = () => {
   }, []);
 
   const startRecording = useCallback(async () => {
+    if (!selectedModel) {
+      alert('Пожалуйста, выберите модель для распознавания.');
+      return;
+    }
+
     setIsRecording(true);
     setTranscript('');
     setProgress(0);
@@ -67,7 +108,7 @@ export const MainPage = () => {
       );
 
       const config = new RecognitionConfig();
-      config.setModel('your_model_name'); // Укажите вашу модель
+      config.setModel(selectedModel); // Используем выбранную модель
       config.setFileName('audio_stream.webm'); // Имя файла (можно динамически генерировать)
       config.setEnableAutomaticPunctuation(false); // Временно не поддерживается
       config.setSilAfterWordTimeoutMs(1000);
@@ -82,27 +123,27 @@ export const MainPage = () => {
       request.setOnlyNew(true);
 
       // Начало стрима
-      const stream = recognitionClientRef.current.streamingRecognize();
+      const streamGRPC = recognitionClientRef.current.streamingRecognize();
 
-      stream.on('data', (response) => {
+      streamGRPC.on('data', (response) => {
         if (response.getText()) {
           setTranscript((prev) => `${prev} ${response.getText()}`);
         }
         // Обработка других полей ответа при необходимости
       });
 
-      stream.on('error', (err) => {
+      streamGRPC.on('error', (err) => {
         console.error('gRPC Stream Error:', err);
         stopRecording();
       });
 
-      stream.on('end', () => {
+      streamGRPC.on('end', () => {
         console.log('gRPC Stream Ended');
         stopRecording();
       });
 
       // Отправка начального запроса с конфигурацией
-      stream.write(request);
+      streamGRPC.write(request);
 
       // Обработка аудио данных
       mediaRecorderRef.current.ondataavailable = (event) => {
@@ -119,7 +160,7 @@ export const MainPage = () => {
             // Установите only_new по необходимости
             audioRequest.setOnlyNew(true);
 
-            stream.write(audioRequest);
+            streamGRPC.write(audioRequest);
           };
           reader.readAsArrayBuffer(event.data);
         }
@@ -130,7 +171,7 @@ export const MainPage = () => {
       console.error('Ошибка доступа к микрофону:', err);
       stopRecording();
     }
-  }, [stopRecording]);
+  }, [selectedModel, stopRecording]);
 
   const clearTranscript = () => {
     setTranscript('');
@@ -145,6 +186,26 @@ export const MainPage = () => {
           </CardTitle>
         </CardHeader>
         <CardContent className='p-6 space-y-6'>
+          {/* Блок выбора модели */}
+          <div className='flex flex-col space-y-2'>
+            <label htmlFor='model-select' className='text-sm font-medium text-foreground'>
+              Выберите модель:
+            </label>
+            <Select onValueChange={(value) => setSelectedModel(value)} value={selectedModel}>
+              <SelectTrigger className='w-full'>
+                <SelectValue placeholder='Выберите модель' />
+              </SelectTrigger>
+              <SelectContent>
+                {models.map((model) => (
+                  <SelectItem key={model.name} value={model.name}>
+                    {model.name} {model.description ? `- ${model.description}` : ''}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          {/* Кнопки управления записью */}
           <div className='flex justify-center space-x-4'>
             <Button
               onClick={isRecording ? stopRecording : startRecording}
@@ -168,12 +229,16 @@ export const MainPage = () => {
               <Trash2 size={20} />
             </Button>
           </div>
+
+          {/* Индикатор записи */}
           {isRecording && (
             <div className='space-y-2'>
               <div className='text-sm font-medium text-center text-muted-foreground'>Запись...</div>
               <Progress value={progress} className='w-full h-1' />
             </div>
           )}
+
+          {/* Текстовая область для транскрипта */}
           <Textarea
             placeholder='Здесь появится распознанный текст...'
             value={transcript}
