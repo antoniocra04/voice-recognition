@@ -18,11 +18,8 @@ import {
 } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
 
-// Импорт сгенерированных gRPC файлов
-import { RecognitionServiceClient } from '../../grpc/recognition_grpc_web_pb';
-import * as recognition_pb from '../../grpc/recognition_pb.js';
-
-const { StreamingRecognitionRequest, RecognitionConfig } = recognition_pb;
+import { Empty, RecognitionConfig, StreamingRecognitionRequest } from '../../grpc/recognition_pb';
+import { RecognitionServiceClient } from '../../grpc/RecognitionServiceClientPb';
 
 export const MainPage = () => {
   const [isRecording, setIsRecording] = useState(false);
