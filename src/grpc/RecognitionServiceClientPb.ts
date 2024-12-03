@@ -10,25 +10,24 @@
 // 	protoc              v5.29.0
 // source: recognition.proto
 
-
 /* eslint-disable */
 // @ts-nocheck
-
 
 import * as grpcWeb from 'grpc-web';
 
 import * as recognition_pb from './recognition_pb'; // proto import: "recognition.proto"
 
-
 export class RecognitionServiceClient {
   client_: grpcWeb.AbstractClientBase;
   hostname_: string;
-  credentials_: null | { [index: string]: string; };
-  options_: null | { [index: string]: any; };
+  credentials_: null | { [index: string]: string };
+  options_: null | { [index: string]: any };
 
-  constructor (hostname: string,
-               credentials?: null | { [index: string]: string; },
-               options?: null | { [index: string]: any; }) {
+  constructor(
+    hostname: string,
+    credentials?: null | { [index: string]: string },
+    options?: null | { [index: string]: any }
+  ) {
     if (!options) options = {};
     if (!credentials) credentials = {};
     options['format'] = 'text';
@@ -52,35 +51,34 @@ export class RecognitionServiceClient {
 
   getSupportedModelsInfo(
     request: recognition_pb.Empty,
-    metadata?: grpcWeb.Metadata | null): Promise<recognition_pb.ModelsResponse>;
+    metadata?: grpcWeb.Metadata | null
+  ): Promise<recognition_pb.ModelsResponse>;
 
   getSupportedModelsInfo(
     request: recognition_pb.Empty,
     metadata: grpcWeb.Metadata | null,
-    callback: (err: grpcWeb.RpcError,
-               response: recognition_pb.ModelsResponse) => void): grpcWeb.ClientReadableStream<recognition_pb.ModelsResponse>;
+    callback: (err: grpcWeb.RpcError, response: recognition_pb.ModelsResponse) => void
+  ): grpcWeb.ClientReadableStream<recognition_pb.ModelsResponse>;
 
   getSupportedModelsInfo(
     request: recognition_pb.Empty,
     metadata?: grpcWeb.Metadata | null,
-    callback?: (err: grpcWeb.RpcError,
-               response: recognition_pb.ModelsResponse) => void) {
+    callback?: (err: grpcWeb.RpcError, response: recognition_pb.ModelsResponse) => void
+  ) {
     if (callback !== undefined) {
       return this.client_.rpcCall(
-        this.hostname_ +
-          '/recognition.RecognitionService/GetSupportedModelsInfo',
+        this.hostname_ + '/recognition.RecognitionService/GetSupportedModelsInfo',
         request,
         metadata || {},
         this.methodDescriptorGetSupportedModelsInfo,
-        callback);
+        callback
+      );
     }
     return this.client_.unaryCall(
-    this.hostname_ +
-      '/recognition.RecognitionService/GetSupportedModelsInfo',
-    request,
-    metadata || {},
-    this.methodDescriptorGetSupportedModelsInfo);
+      this.hostname_ + '/recognition.RecognitionService/GetSupportedModelsInfo',
+      request,
+      metadata || {},
+      this.methodDescriptorGetSupportedModelsInfo
+    );
   }
-
 }
-

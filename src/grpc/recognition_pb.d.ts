@@ -1,6 +1,4 @@
-import * as jspb from 'google-protobuf'
-
-
+import * as jspb from 'google-protobuf';
 
 export class Empty extends jspb.Message {
   serializeBinary(): Uint8Array;
@@ -12,8 +10,7 @@ export class Empty extends jspb.Message {
 }
 
 export namespace Empty {
-  export type AsObject = {
-  }
+  export type AsObject = {};
 }
 
 export class Model extends jspb.Message {
@@ -33,9 +30,9 @@ export class Model extends jspb.Message {
 
 export namespace Model {
   export type AsObject = {
-    name: string,
-    description: string,
-  }
+    name: string;
+    description: string;
+  };
 }
 
 export class ModelsResponse extends jspb.Message {
@@ -49,13 +46,16 @@ export class ModelsResponse extends jspb.Message {
   static toObject(includeInstance: boolean, msg: ModelsResponse): ModelsResponse.AsObject;
   static serializeBinaryToWriter(message: ModelsResponse, writer: jspb.BinaryWriter): void;
   static deserializeBinary(bytes: Uint8Array): ModelsResponse;
-  static deserializeBinaryFromReader(message: ModelsResponse, reader: jspb.BinaryReader): ModelsResponse;
+  static deserializeBinaryFromReader(
+    message: ModelsResponse,
+    reader: jspb.BinaryReader
+  ): ModelsResponse;
 }
 
 export namespace ModelsResponse {
   export type AsObject = {
-    modelsList: Array<Model.AsObject>,
-  }
+    modelsList: Array<Model.AsObject>;
+  };
 }
 
 export class RecognitionConfig extends jspb.Message {
@@ -88,20 +88,23 @@ export class RecognitionConfig extends jspb.Message {
   static toObject(includeInstance: boolean, msg: RecognitionConfig): RecognitionConfig.AsObject;
   static serializeBinaryToWriter(message: RecognitionConfig, writer: jspb.BinaryWriter): void;
   static deserializeBinary(bytes: Uint8Array): RecognitionConfig;
-  static deserializeBinaryFromReader(message: RecognitionConfig, reader: jspb.BinaryReader): RecognitionConfig;
+  static deserializeBinaryFromReader(
+    message: RecognitionConfig,
+    reader: jspb.BinaryReader
+  ): RecognitionConfig;
 }
 
 export namespace RecognitionConfig {
   export type AsObject = {
-    model: string,
-    fileName: string,
-    enableAutomaticPunctuation: boolean,
-    silAfterWordTimeoutMs: number,
-    sampleRate: number,
-    enableAnswerphoneDetection: boolean,
-    enableSentimentsDetection: boolean,
-    enableAgeIdentification: boolean,
-  }
+    model: string;
+    fileName: string;
+    enableAutomaticPunctuation: boolean;
+    silAfterWordTimeoutMs: number;
+    sampleRate: number;
+    enableAnswerphoneDetection: boolean;
+    enableSentimentsDetection: boolean;
+    enableAgeIdentification: boolean;
+  };
 }
 
 export class StreamingRecognitionRequest extends jspb.Message {
@@ -120,18 +123,27 @@ export class StreamingRecognitionRequest extends jspb.Message {
 
   serializeBinary(): Uint8Array;
   toObject(includeInstance?: boolean): StreamingRecognitionRequest.AsObject;
-  static toObject(includeInstance: boolean, msg: StreamingRecognitionRequest): StreamingRecognitionRequest.AsObject;
-  static serializeBinaryToWriter(message: StreamingRecognitionRequest, writer: jspb.BinaryWriter): void;
+  static toObject(
+    includeInstance: boolean,
+    msg: StreamingRecognitionRequest
+  ): StreamingRecognitionRequest.AsObject;
+  static serializeBinaryToWriter(
+    message: StreamingRecognitionRequest,
+    writer: jspb.BinaryWriter
+  ): void;
   static deserializeBinary(bytes: Uint8Array): StreamingRecognitionRequest;
-  static deserializeBinaryFromReader(message: StreamingRecognitionRequest, reader: jspb.BinaryReader): StreamingRecognitionRequest;
+  static deserializeBinaryFromReader(
+    message: StreamingRecognitionRequest,
+    reader: jspb.BinaryReader
+  ): StreamingRecognitionRequest;
 }
 
 export namespace StreamingRecognitionRequest {
   export type AsObject = {
-    config?: RecognitionConfig.AsObject,
-    audioContent: Uint8Array | string,
-    onlyNew: boolean,
-  }
+    config?: RecognitionConfig.AsObject;
+    audioContent: Uint8Array | string;
+    onlyNew: boolean;
+  };
 }
 
 export class StreamingRecognitionResponse extends jspb.Message {
@@ -168,38 +180,52 @@ export class StreamingRecognitionResponse extends jspb.Message {
 
   serializeBinary(): Uint8Array;
   toObject(includeInstance?: boolean): StreamingRecognitionResponse.AsObject;
-  static toObject(includeInstance: boolean, msg: StreamingRecognitionResponse): StreamingRecognitionResponse.AsObject;
-  static serializeBinaryToWriter(message: StreamingRecognitionResponse, writer: jspb.BinaryWriter): void;
+  static toObject(
+    includeInstance: boolean,
+    msg: StreamingRecognitionResponse
+  ): StreamingRecognitionResponse.AsObject;
+  static serializeBinaryToWriter(
+    message: StreamingRecognitionResponse,
+    writer: jspb.BinaryWriter
+  ): void;
   static deserializeBinary(bytes: Uint8Array): StreamingRecognitionResponse;
-  static deserializeBinaryFromReader(message: StreamingRecognitionResponse, reader: jspb.BinaryReader): StreamingRecognitionResponse;
+  static deserializeBinaryFromReader(
+    message: StreamingRecognitionResponse,
+    reader: jspb.BinaryReader
+  ): StreamingRecognitionResponse;
 }
 
 export namespace StreamingRecognitionResponse {
   export type AsObject = {
-    chunksList: Array<SpeechRecognitionChunk.AsObject>,
-    sessionId: string,
-    text: string,
-    pb_final: boolean,
-    qualityScore: number,
-    answerphoneDetected: boolean,
-    sentimentsInfo?: SentimentsInfo.AsObject,
-    wordsPerSecond: number,
-    ageGroup: string,
-  }
+    chunksList: Array<SpeechRecognitionChunk.AsObject>;
+    sessionId: string;
+    text: string;
+    pb_final: boolean;
+    qualityScore: number;
+    answerphoneDetected: boolean;
+    sentimentsInfo?: SentimentsInfo.AsObject;
+    wordsPerSecond: number;
+    ageGroup: string;
+  };
 }
 
 export class SpeechRecognitionChunk extends jspb.Message {
   serializeBinary(): Uint8Array;
   toObject(includeInstance?: boolean): SpeechRecognitionChunk.AsObject;
-  static toObject(includeInstance: boolean, msg: SpeechRecognitionChunk): SpeechRecognitionChunk.AsObject;
+  static toObject(
+    includeInstance: boolean,
+    msg: SpeechRecognitionChunk
+  ): SpeechRecognitionChunk.AsObject;
   static serializeBinaryToWriter(message: SpeechRecognitionChunk, writer: jspb.BinaryWriter): void;
   static deserializeBinary(bytes: Uint8Array): SpeechRecognitionChunk;
-  static deserializeBinaryFromReader(message: SpeechRecognitionChunk, reader: jspb.BinaryReader): SpeechRecognitionChunk;
+  static deserializeBinaryFromReader(
+    message: SpeechRecognitionChunk,
+    reader: jspb.BinaryReader
+  ): SpeechRecognitionChunk;
 }
 
 export namespace SpeechRecognitionChunk {
-  export type AsObject = {
-  }
+  export type AsObject = {};
 }
 
 export class SentimentsInfo extends jspb.Message {
@@ -208,11 +234,12 @@ export class SentimentsInfo extends jspb.Message {
   static toObject(includeInstance: boolean, msg: SentimentsInfo): SentimentsInfo.AsObject;
   static serializeBinaryToWriter(message: SentimentsInfo, writer: jspb.BinaryWriter): void;
   static deserializeBinary(bytes: Uint8Array): SentimentsInfo;
-  static deserializeBinaryFromReader(message: SentimentsInfo, reader: jspb.BinaryReader): SentimentsInfo;
+  static deserializeBinaryFromReader(
+    message: SentimentsInfo,
+    reader: jspb.BinaryReader
+  ): SentimentsInfo;
 }
 
 export namespace SentimentsInfo {
-  export type AsObject = {
-  }
+  export type AsObject = {};
 }
-
