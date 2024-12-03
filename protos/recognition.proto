@@ -2,21 +2,18 @@ syntax = "proto3";
 
 package recognition;
 
-// Пустое сообщение для запросов без параметров
+// Определение сообщений
 message Empty {}
 
-// Модель распознавания
 message Model {
-  string name = 1; // Имя модели
-  string description = 2; // Описание модели (опционально)
+  string name = 1;
+  string description = 2;
 }
 
-// Ответ на запрос списка моделей
 message ModelsResponse {
   repeated Model models = 1;
 }
 
-// Конфигурация распознавания
 message RecognitionConfig {
   string model = 1;
   string file_name = 2;
@@ -26,17 +23,14 @@ message RecognitionConfig {
   bool enable_answerphone_detection = 6;
   bool enable_sentiments_detection = 7;
   bool enable_age_identification = 8;
-  // Добавьте остальные поля по необходимости
 }
 
-// Запрос для потокового распознавания
 message StreamingRecognitionRequest {
   RecognitionConfig config = 1;
   bytes audio_content = 2;
   bool only_new = 3;
 }
 
-// Ответ от потокового распознавания
 message StreamingRecognitionResponse {
   repeated SpeechRecognitionChunk chunks = 1;
   string session_id = 2;
@@ -49,20 +43,19 @@ message StreamingRecognitionResponse {
   string age_group = 9;
 }
 
-// Другие необходимые сообщения
 message SpeechRecognitionChunk {
-  // Определите поля
+  // Определите поля по необходимости
 }
 
 message SentimentsInfo {
-  // Определите поля
+  // Определите поля по необходимости
 }
 
-// Сервис распознавания
+// Определение сервиса
 service RecognitionService {
   // Метод потокового распознавания
   rpc StreamingRecognize (stream StreamingRecognitionRequest) returns (stream StreamingRecognitionResponse);
-
+  
   // Метод получения списка поддерживаемых моделей
   rpc GetSupportedModelsInfo (Empty) returns (ModelsResponse);
 }

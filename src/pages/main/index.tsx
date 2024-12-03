@@ -18,7 +18,13 @@ import {
 } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
 
-import { Empty, RecognitionConfig, StreamingRecognitionRequest } from '../../grpc/recognition_pb';
+import {
+  Empty,
+  Model,
+  ModelsResponse,
+  RecognitionConfig,
+  StreamingRecognitionRequest
+} from '../../grpc/recognition_pb';
 import { RecognitionServiceClient } from '../../grpc/RecognitionServiceClientPb';
 
 export const MainPage = () => {
