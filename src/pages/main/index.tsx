@@ -1,10 +1,11 @@
-// src/components/MainPage.js
+// src/MainPage.jsx
 
-'use client';
-
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useRef, useState } from 'react';
+import axios from 'axios';
 import { motion } from 'framer-motion';
-import { Mic, MicOff, Trash2 } from 'lucide-react';
+import { Mic, StopCircle, Trash2 } from 'lucide-react';
+import RecordRTC from 'recordrtc';
+import io from 'socket.io-client';
 
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -18,164 +19,132 @@ import {
 } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
 
-import {
-  Empty,
-  Model,
-  ModelsResponse,
-  RecognitionConfig,
-  StreamingRecognitionRequest
-} from '../../grpc/recognition_pb';
-import { RecognitionServiceClient } from '../../grpc/RecognitionServiceClientPb';
-
 export const MainPage = () => {
   const [isRecording, setIsRecording] = useState(false);
   const [transcript, setTranscript] = useState('');
-  const [progress, setProgress] = useState(0);
-  const [models, setModels] = useState([]);
   const [selectedModel, setSelectedModel] = useState('');
-  const timerRef = useRef(null);
-  const mediaRecorderRef = useRef(null);
-  const recognitionClientRef = useRef(null);
-  const streamRef = useRef(null);
+  const [loadingToken, setLoadingToken] = useState(false);
+  const [error, setError] = useState('');
+  const socketRef = useRef(null);
+  const mediaStreamRef = useRef(null);
+  const recorderRef = useRef(null);
+  const audioContextRef = useRef(null);
 
-  // Функция для получения списка поддерживаемых моделей
-  const fetchSupportedModels = useCallback(() => {
-    const client = new RecognitionServiceClient('http://localhost:8080', null, null);
-    const request = new Empty();
+  // Функция для получения токена
+  const getToken = async (username, password) => {
+    setLoadingToken(true);
+    setError('');
+    try {
+      const response = await axios.post('http://localhost:3000/auth/login', { username, password });
 
-    client.getSupportedModelsInfo(request, {}, (err, response) => {
-      if (err) {
-        console.error('Ошибка при получении моделей:', err);
-        return;
-      }
-      const modelsList = response.getModelsList().map((model) => ({
-        name: model.getName(),
-        description: model.getDescription()
-      }));
-      setModels(modelsList);
-      if (modelsList.length > 0) {
-        setSelectedModel(modelsList[0].name); // Установить первую модель по умолчанию
-      }
-    });
-  }, []);
-
-  useEffect(() => {
-    fetchSupportedModels();
-  }, [fetchSupportedModels]);
-
-  const stopRecording = useCallback(() => {
-    setIsRecording(false);
-    if (timerRef.current) {
-      clearInterval(timerRef.current);
+      return response.data.access_token;
+    } catch (err) {
+      console.error('Error obtaining token:', err.response?.data || err.message);
+      setError('Не удалось получить токен. Проверьте ваши учетные данные.');
+      return null;
+    } finally {
+      setLoadingToken(false);
     }
-    if (mediaRecorderRef.current) {
-      mediaRecorderRef.current.stop();
-    }
-    if (recognitionClientRef.current) {
-      recognitionClientRef.current.close(); // Закрыть gRPC поток
-    }
-  }, []);
+  };
 
-  const startRecording = useCallback(async () => {
+  const startRecording = async () => {
+    const username = 'daniel@zakiyev.com'; // Замените на имя пользователя
+    const password = 'Qw12er34'; // Замените на пароль пользователя
     if (!selectedModel) {
-      alert('Пожалуйста, выберите модель для распознавания.');
+      setError('Пожалуйста, выберите модель перед началом записи.');
       return;
     }
 
-    setIsRecording(true);
-    setTranscript('');
-    setProgress(0);
+    if (!username || !password) {
+      setError('Пожалуйста, введите имя пользователя и пароль.');
+      return;
+    }
 
-    // Настройка прогресс-бара
-    timerRef.current = setInterval(() => {
-      setProgress((prevProgress) => {
-        if (prevProgress >= 100) {
-          stopRecording();
-          return 100;
-        }
-        return prevProgress + 1;
-      });
-    }, 100);
+    const token = await getToken(username, password);
+    if (!token) return;
 
-    // Запрос доступа к микрофону
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      streamRef.current = stream;
-      mediaRecorderRef.current = new MediaRecorder(stream, { mimeType: 'audio/webm;codecs=pcm' });
+      mediaStreamRef.current = stream;
 
-      // Инициализация gRPC клиента
-      recognitionClientRef.current = new RecognitionServiceClient(
-        'http://localhost:8080',
-        null,
-        null
-      );
-
-      const config = new RecognitionConfig();
-      config.setModel(selectedModel); // Используем выбранную модель
-      config.setFileName('audio_stream.webm'); // Имя файла (можно динамически генерировать)
-      config.setEnableAutomaticPunctuation(false); // Временно не поддерживается
-      config.setSilAfterWordTimeoutMs(1000);
-      config.setSampleRate(16000); // Замените на вашу частоту дискретизации
-      config.setEnableAnswerphoneDetection(true);
-      config.setEnableSentimentsDetection(true);
-      config.setEnableAgeIdentification(true);
-      // Настройте остальные параметры по необходимости
-
-      const request = new StreamingRecognitionRequest();
-      request.setConfig(config);
-      request.setOnlyNew(true);
-
-      // Начало стрима
-      const streamGRPC = recognitionClientRef.current.streamingRecognize();
-
-      streamGRPC.on('data', (response) => {
-        if (response.getText()) {
-          setTranscript((prev) => `${prev} ${response.getText()}`);
-        }
-        // Обработка других полей ответа при необходимости
+      recorderRef.current = new RecordRTC(stream, {
+        type: 'audio',
+        mimeType: 'audio/wav', // WAV поддерживает PCM формат
+        desiredSampRate: 16000, // 16kHz
+        numberOfAudioChannels: 1 // Mono
       });
 
-      streamGRPC.on('error', (err) => {
-        console.error('gRPC Stream Error:', err);
-        stopRecording();
+      recorderRef.current.startRecording();
+
+      // Устанавливаем соединение через Socket.IO
+      const socket = io('http://localhost:3000'); // Замените на URL вашего бэкенда
+      socketRef.current = socket;
+
+      // Отправляем событие начала распознавания с токеном и моделью
+      socket.emit('startRecognition', {
+        token,
+        model: selectedModel
       });
 
-      streamGRPC.on('end', () => {
-        console.log('gRPC Stream Ended');
-        stopRecording();
+      // Обработка полученного текста
+      socket.on('recognizedText', (data) => {
+        setTranscript((prev) => `${prev} ${data.text}`);
       });
 
-      // Отправка начального запроса с конфигурацией
-      streamGRPC.write(request);
+      // Обработка завершения распознавания
+      socket.on('recognitionEnd', () => {
+        setIsRecording(false);
+      });
 
-      // Обработка аудио данных
-      mediaRecorderRef.current.ondataavailable = (event) => {
-        if (event.data && event.data.size > 0) {
-          const reader = new FileReader();
-          reader.onload = () => {
-            const arrayBuffer = reader.result;
-            const uint8Array = new Uint8Array(arrayBuffer);
-            const audioBytes = uint8Array.buffer;
-            const audioContent = new Uint8Array(audioBytes);
+      // Обработка ошибок
+      socket.on('error', (data) => {
+        console.error('Ошибка распознавания:', data.message);
+        setError(`Ошибка распознавания: ${data.message}`);
+        setIsRecording(false);
+      });
 
-            const audioRequest = new StreamingRecognitionRequest();
-            audioRequest.setAudioContent(audioContent);
-            // Установите only_new по необходимости
-            audioRequest.setOnlyNew(true);
-
-            streamGRPC.write(audioRequest);
-          };
-          reader.readAsArrayBuffer(event.data);
-        }
-      };
-
-      mediaRecorderRef.current.start(250); // Отправлять каждые 250ms
+      setIsRecording(true);
+      setTranscript('');
     } catch (err) {
-      console.error('Ошибка доступа к микрофону:', err);
-      stopRecording();
+      console.error('Error accessing microphone:', err);
+      setError('Ошибка доступа к микрофону.');
     }
-  }, [selectedModel, stopRecording]);
+  };
 
+  // Функция для остановки записи
+  const stopRecording = async () => {
+    try {
+      if (recorderRef.current) {
+        await recorderRef.current.stopRecording();
+
+        // Получаем Blob с аудиоданными
+        const blob = recorderRef.current.getBlob();
+
+        // Читаем Blob как ArrayBuffer
+        const arrayBuffer = await blob.arrayBuffer();
+
+        // Отправляем аудиоданные на бэкенд
+        socketRef.current.emit('audioData', arrayBuffer);
+        socketRef.current.emit('stopRecognition');
+
+        // Останавливаем и очищаем медиа потоки
+        mediaStreamRef.current.getTracks().forEach((track) => track.stop());
+        recorderRef.current.destroy();
+        recorderRef.current = null;
+      }
+
+      if (socketRef.current) {
+        socketRef.current.disconnect();
+      }
+
+      setIsRecording(false);
+    } catch (err) {
+      console.error('Error stopping recorder:', err);
+      setError('Ошибка остановки записи.');
+    }
+  };
+
+  // Функция для очистки транскрипта
   const clearTranscript = () => {
     setTranscript('');
   };
@@ -194,33 +163,33 @@ export const MainPage = () => {
             <label htmlFor='model-select' className='text-sm font-medium text-foreground'>
               Выберите модель:
             </label>
-            <Select onValueChange={(value) => setSelectedModel(value)} value={selectedModel}>
+            <Select onValueChange={(value) => setSelectedModel(value)}>
               <SelectTrigger className='w-full'>
                 <SelectValue placeholder='Выберите модель' />
               </SelectTrigger>
               <SelectContent>
-                {models.map((model) => (
-                  <SelectItem key={model.name} value={model.name}>
-                    {model.name} {model.description ? `- ${model.description}` : ''}
-                  </SelectItem>
-                ))}
+                {/* Добавьте ваши модели здесь */}
+                <SelectItem value='kk_telephony_16000'>kk_telephony_16000</SelectItem>
+                <SelectItem value='ru_telephony_16000'>ru_telephony_16000</SelectItem>
+                {/* и т.д. */}
               </SelectContent>
             </Select>
           </div>
+
+          {/* Отображение ошибок */}
+          {error && <div className='text-red-500 text-sm'>{error}</div>}
 
           {/* Кнопки управления записью */}
           <div className='flex justify-center space-x-4'>
             <Button
               onClick={isRecording ? stopRecording : startRecording}
-              variant={isRecording ? 'destructive' : 'default'}
+              variant='default'
               size='icon'
               className='w-12 h-12 rounded-full'
+              disabled={loadingToken}
             >
-              <motion.div
-                animate={{ scale: isRecording ? [1, 1.2, 1] : 1 }}
-                transition={{ repeat: Infinity, duration: 1 }}
-              >
-                {isRecording ? <MicOff size={20} /> : <Mic size={20} />}
+              <motion.div transition={{ repeat: Infinity, duration: 1 }}>
+                {isRecording ? <StopCircle size={20} /> : <Mic size={20} />}
               </motion.div>
             </Button>
             <Button
@@ -237,14 +206,14 @@ export const MainPage = () => {
           {isRecording && (
             <div className='space-y-2'>
               <div className='text-sm font-medium text-center text-muted-foreground'>Запись...</div>
-              <Progress value={progress} className='w-full h-1' />
+              <Progress className='w-full h-1' />
             </div>
           )}
 
           {/* Текстовая область для транскрипта */}
           <Textarea
-            placeholder='Здесь появится распознанный текст...'
             value={transcript}
+            placeholder='Здесь появится распознанный текст...'
             readOnly
             className='h-40 resize-none bg-muted text-foreground placeholder-muted-foreground'
           />
