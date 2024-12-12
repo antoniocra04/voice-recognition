@@ -2,7 +2,7 @@ import axios from 'axios';
 
 import { store } from '../store';
 
-export const HOST = '';
+export const HOST = 'http://localhost:3000';
 export const BACKEND_URL = `${HOST}`;
 
 export const axiosClient = axios.create({
@@ -11,6 +11,6 @@ export const axiosClient = axios.create({
 });
 
 axiosClient.interceptors.request.use(function (config) {
-  config.headers.Authorization = `Bearer ${store.getState().user.token}`;
+  config.headers.Authorization = `Bearer CBRdTqKQL4TP1Ovjm5bfeAydzX`;
   return config;
 });

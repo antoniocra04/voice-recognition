@@ -3,13 +3,12 @@
 import React, { useRef, useState } from 'react';
 import axios from 'axios';
 import { motion } from 'framer-motion';
-import { Mic, StopCircle, Trash2 } from 'lucide-react';
+import { Mic, StopCircle, Trash2, Upload } from 'lucide-react';
 import RecordRTC from 'recordrtc';
 import io from 'socket.io-client';
 
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Progress } from '@/components/ui/progress';
 import {
   Select,
   SelectContent,
@@ -18,6 +17,17 @@ import {
   SelectValue
 } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
+import { useRecognizeFile } from '@/hooks/useRecognizeFile';
+
+function floatTo16BitPCM(input) {
+  const output = new Int16Array(input.length);
+  for (let i = 0; i < input.length; i++) {
+    let s = Math.max(-1, Math.min(1, input[i]));
+    s = s < 0 ? s * 0x8000 : s * 0x7fff;
+    output[i] = s;
+  }
+  return output;
+}
 
 export const MainPage = () => {
   const [isRecording, setIsRecording] = useState(false);
@@ -28,6 +38,16 @@ export const MainPage = () => {
   const socketRef = useRef(null);
   const mediaStreamRef = useRef(null);
   const recorderRef = useRef(null);
+  const [isUploading, setIsUploading] = useState(false);
+  const [uploadedFileName, setUploadedFileName] = useState('');
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const recognizeFile = useRecognizeFile();
+  const [progress, setProgress] = useState();
+  const [audioBlob, setAudioBlob] = useState(null);
+  const [mediaRecorder, setMediaRecorder] = useState(null);
+  const streamRef = useRef(null);
+  const processorRef = useRef(null);
+  const sourceRef = useRef(null);
   const audioContextRef = useRef(null);
 
   // Функция для получения токена
@@ -48,8 +68,9 @@ export const MainPage = () => {
   };
 
   const startRecording = async () => {
-    const username = 'daniel@zakiyev.com'; // Замените на имя пользователя
-    const password = 'Qw12er34'; // Замените на пароль пользователя
+    const username = 'antoniocra04@gmail.com';
+    const password = 'gonrag-kavXux-mohcu3';
+
     if (!selectedModel) {
       setError('Пожалуйста, выберите модель перед началом записи.');
       return;
@@ -63,45 +84,65 @@ export const MainPage = () => {
     const token = await getToken(username, password);
     if (!token) return;
 
+    // Инициализируем socket
+    const socket = io('http://localhost:3000');
+    socketRef.current = socket;
+
+    // Создаём AudioContext без указания sampleRate
+    const audioContext = new AudioContext({ sampleRate: 16000 }); // Использует частоту дискретизации по умолчанию, например, 48000 Гц
+    audioContextRef.current = audioContext;
+
+    socket.emit('startRecognition', {
+      config: {
+        model: selectedModel,
+        file_name: 'session.wav',
+        enable_automatic_punctuation: true,
+        sil_after_word_timeout_ms: 150,
+        sample_rate: 16000 // Частота, ожидаемая моделью после ресэмплинга на бэкенде
+      },
+      token,
+      onlyNew: true
+    });
+
+    // Обработка полученного текста
+    socket.on('recognitionResult', (data) => {
+      console.log(data);
+      setTranscript((prev) => `${prev} ${data.text}`);
+    });
+
+    // Обработка завершения распознавания
+    socket.on('recognitionFinished', () => {
+      setIsRecording(false);
+    });
+
+    // Обработка ошибок
+    socket.on('recognitionError', (msg) => {
+      console.error('Ошибка распознавания:', msg);
+      setError(`Ошибка распознавания: ${msg}`);
+      setIsRecording(false);
+    });
+
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      mediaStreamRef.current = stream;
+      streamRef.current = stream;
 
-      recorderRef.current = new RecordRTC(stream, {
-        type: 'audio',
-        mimeType: 'audio/wav', // WAV поддерживает PCM формат
-        desiredSampRate: 16000, // 16kHz
-        numberOfAudioChannels: 1 // Mono
-      });
+      const source = audioContext.createMediaStreamSource(stream);
+      sourceRef.current = source;
 
-      recorderRef.current.startRecording();
+      // Создаём ScriptProcessorNode с bufferSize = 4096
+      const processor = audioContext.createScriptProcessor(4096, 1, 1);
+      processorRef.current = processor;
 
-      // Устанавливаем соединение через Socket.IO
-      const socket = io('http://localhost:3000'); // Замените на URL вашего бэкенда
-      socketRef.current = socket;
+      processor.onaudioprocess = (event) => {
+        const inputBuffer = event.inputBuffer.getChannelData(0);
+        const pcm16 = floatTo16BitPCM(inputBuffer);
 
-      // Отправляем событие начала распознавания с токеном и моделью
-      socket.emit('startRecognition', {
-        token,
-        model: selectedModel
-      });
+        // Отправляем бинарные данные напрямую
+        socket.emit('audioData', pcm16.buffer);
+      };
 
-      // Обработка полученного текста
-      socket.on('recognizedText', (data) => {
-        setTranscript((prev) => `${prev} ${data.text}`);
-      });
-
-      // Обработка завершения распознавания
-      socket.on('recognitionEnd', () => {
-        setIsRecording(false);
-      });
-
-      // Обработка ошибок
-      socket.on('error', (data) => {
-        console.error('Ошибка распознавания:', data.message);
-        setError(`Ошибка распознавания: ${data.message}`);
-        setIsRecording(false);
-      });
+      source.connect(processor);
+      processor.connect(audioContext.destination);
 
       setIsRecording(true);
       setTranscript('');
@@ -111,42 +152,59 @@ export const MainPage = () => {
     }
   };
 
-  // Функция для остановки записи
-  const stopRecording = async () => {
-    try {
-      if (recorderRef.current) {
-        await recorderRef.current.stopRecording();
+  const stopRecording = () => {
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach((track) => track.stop());
+    }
 
-        // Получаем Blob с аудиоданными
-        const blob = recorderRef.current.getBlob();
+    if (sourceRef.current) {
+      sourceRef.current.disconnect();
+    }
 
-        // Читаем Blob как ArrayBuffer
-        const arrayBuffer = await blob.arrayBuffer();
+    if (processorRef.current) {
+      processorRef.current.disconnect();
+    }
 
-        // Отправляем аудиоданные на бэкенд
-        socketRef.current.emit('audioData', arrayBuffer);
-        socketRef.current.emit('stopRecognition');
+    if (audioContextRef.current && audioContextRef.current.state !== 'closed') {
+      audioContextRef.current.close();
+    }
 
-        // Останавливаем и очищаем медиа потоки
-        mediaStreamRef.current.getTracks().forEach((track) => track.stop());
-        recorderRef.current.destroy();
-        recorderRef.current = null;
-      }
+    if (socketRef.current) {
+      socketRef.current.emit('stopRecognition');
+      socketRef.current.disconnect();
+      socketRef.current = null;
+    }
 
-      if (socketRef.current) {
-        socketRef.current.disconnect();
-      }
+    setIsRecording(false);
+  };
 
-      setIsRecording(false);
-    } catch (err) {
-      console.error('Error stopping recorder:', err);
-      setError('Ошибка остановки записи.');
+  const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (file) {
+      setIsUploading(true);
+      setUploadedFileName(file.name);
+
+      const arrayBuffer = await file.arrayBuffer();
+      const uint8Array = new Uint8Array(arrayBuffer);
+      const byteArray = Array.from(uint8Array);
+      console.log(uploadedFileName);
+
+      recognizeFile.mutate({ file: byteArray, model: selectedModel, filename: file.name });
+
+      setIsUploading(false);
+      setTranscript(
+        `Распознанный текст из файла ${file.name}: Это пример текста, полученного из загруженного аудиофайла.`
+      );
     }
   };
 
   // Функция для очистки транскрипта
   const clearTranscript = () => {
     setTranscript('');
+  };
+
+  const triggerFileUpload = () => {
+    fileInputRef.current?.click();
   };
 
   return (
@@ -193,6 +251,30 @@ export const MainPage = () => {
               </motion.div>
             </Button>
             <Button
+              onClick={triggerFileUpload}
+              style={{
+                width: '3rem',
+                height: '3rem',
+                borderRadius: '9999px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                backgroundColor: '#1d4ed8',
+                color: '#ffffff',
+                border: 'none',
+                cursor: 'pointer'
+              }}
+            >
+              <Upload size={20} />
+            </Button>
+            <input
+              type='file'
+              ref={fileInputRef}
+              onChange={handleFileUpload}
+              accept='audio/*'
+              style={{ display: 'none' }}
+            />
+            <Button
               onClick={clearTranscript}
               variant='outline'
               size='icon'
@@ -203,13 +285,50 @@ export const MainPage = () => {
           </div>
 
           {/* Индикатор записи */}
-          {isRecording && (
-            <div className='space-y-2'>
-              <div className='text-sm font-medium text-center text-muted-foreground'>Запись...</div>
-              <Progress className='w-full h-1' />
+          {(isRecording || isUploading) && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+              <div
+                style={{
+                  fontSize: '0.875rem',
+                  fontWeight: 500,
+                  textAlign: 'center',
+                  color: '#71717a'
+                }}
+              >
+                {isRecording ? 'Запись...' : 'Загрузка...'}
+              </div>
+              <div
+                style={{
+                  width: '100%',
+                  height: '4px',
+                  backgroundColor: '#27272a',
+                  borderRadius: '9999px',
+                  overflow: 'hidden'
+                }}
+              >
+                <div
+                  style={{
+                    width: isUploading ? '100%' : `${progress}%`,
+                    height: '100%',
+                    backgroundColor: '#3b82f6',
+                    transition: 'width 0.3s ease-in-out',
+                    animation: isUploading ? 'pulse 1.5s infinite' : 'none'
+                  }}
+                />
+              </div>
             </div>
           )}
-
+          {uploadedFileName && (
+            <div
+              style={{
+                fontSize: '0.875rem',
+                color: '#71717a',
+                textAlign: 'center'
+              }}
+            >
+              Загруженный файл: {uploadedFileName}
+            </div>
+          )}
           {/* Текстовая область для транскрипта */}
           <Textarea
             value={transcript}
