@@ -1,11 +1,10 @@
-// src/MainPage.jsx
-
 import React, { useRef, useState } from 'react';
-import axios from 'axios';
+import { useAuth } from '@hooks/useAuth';
+import { useRecognizeFile } from '@hooks/useRecognizeFile';
+import type { RecognitionResult } from '@hooks/useTranscription';
+import { useTranscription } from '@hooks/useTranscription';
 import { motion } from 'framer-motion';
 import { Mic, StopCircle, Trash2, Upload } from 'lucide-react';
-import RecordRTC from 'recordrtc';
-import io from 'socket.io-client';
 
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -17,57 +16,34 @@ import {
   SelectValue
 } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
-import { useRecognizeFile } from '@/hooks/useRecognizeFile';
 
-function floatTo16BitPCM(input) {
-  const output = new Int16Array(input.length);
-  for (let i = 0; i < input.length; i++) {
-    let s = Math.max(-1, Math.min(1, input[i]));
-    s = s < 0 ? s * 0x8000 : s * 0x7fff;
-    output[i] = s;
-  }
-  return output;
-}
+export const MainPage: React.FC = () => {
+  const [transcript, setTranscript] = useState<string>('');
+  const [selectedModel, setSelectedModel] = useState<string>('');
+  const [error, setError] = useState<string>('');
+  const [isUploading, setIsUploading] = useState<boolean>(false);
+  const [uploadedFileName, setUploadedFileName] = useState<string>('');
 
-export const MainPage = () => {
-  const [isRecording, setIsRecording] = useState(false);
-  const [transcript, setTranscript] = useState('');
-  const [selectedModel, setSelectedModel] = useState('');
-  const [loadingToken, setLoadingToken] = useState(false);
-  const [error, setError] = useState('');
-  const socketRef = useRef(null);
-  const mediaStreamRef = useRef(null);
-  const recorderRef = useRef(null);
-  const [isUploading, setIsUploading] = useState(false);
-  const [uploadedFileName, setUploadedFileName] = useState('');
-  const fileInputRef = useRef<HTMLInputElement>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
   const recognizeFile = useRecognizeFile();
-  const [progress, setProgress] = useState();
-  const [audioBlob, setAudioBlob] = useState(null);
-  const [mediaRecorder, setMediaRecorder] = useState(null);
-  const streamRef = useRef(null);
-  const processorRef = useRef(null);
-  const sourceRef = useRef(null);
-  const audioContextRef = useRef(null);
 
-  // Функция для получения токена
-  const getToken = async (username, password) => {
-    setLoadingToken(true);
-    setError('');
-    try {
-      const response = await axios.post('http://localhost:3000/auth/login', { username, password });
+  const { getToken, loading: loadingToken, error: authError } = useAuth();
 
-      return response.data.access_token;
-    } catch (err) {
-      console.error('Error obtaining token:', err.response?.data || err.message);
-      setError('Не удалось получить токен. Проверьте ваши учетные данные.');
-      return null;
-    } finally {
-      setLoadingToken(false);
-    }
+  const handleResult = (data: RecognitionResult) => {
+    setTranscript((prev) => `${prev} ${data.text}`);
   };
 
-  const startRecording = async () => {
+  const handleError = (msg: string) => {
+    console.error('Ошибка распознавания:', msg);
+    setError(`Ошибка распознавания: ${msg}`);
+  };
+
+  const { isRecording, startTranscription, stopTranscription } = useTranscription({
+    onResult: handleResult,
+    onError: handleError
+  });
+
+  const handleStartRecording = async () => {
     const username = 'antoniocra04@gmail.com';
     const password = 'gonrag-kavXux-mohcu3';
 
@@ -82,100 +58,20 @@ export const MainPage = () => {
     }
 
     const token = await getToken(username, password);
-    if (!token) return;
+    if (!token) {
+      return;
+    }
 
-    // Инициализируем socket
-    const socket = io('http://localhost:3000');
-    socketRef.current = socket;
-
-    // Создаём AudioContext без указания sampleRate
-    const audioContext = new AudioContext({ sampleRate: 16000 }); // Использует частоту дискретизации по умолчанию, например, 48000 Гц
-    audioContextRef.current = audioContext;
-
-    socket.emit('startRecognition', {
+    startTranscription({
       config: {
         model: selectedModel,
         file_name: 'session.wav',
         enable_automatic_punctuation: true,
         sil_after_word_timeout_ms: 150,
-        sample_rate: 16000 // Частота, ожидаемая моделью после ресэмплинга на бэкенде
+        sample_rate: 16000
       },
-      token,
-      onlyNew: true
+      token
     });
-
-    // Обработка полученного текста
-    socket.on('recognitionResult', (data) => {
-      console.log(data);
-      setTranscript((prev) => `${prev} ${data.text}`);
-    });
-
-    // Обработка завершения распознавания
-    socket.on('recognitionFinished', () => {
-      setIsRecording(false);
-    });
-
-    // Обработка ошибок
-    socket.on('recognitionError', (msg) => {
-      console.error('Ошибка распознавания:', msg);
-      setError(`Ошибка распознавания: ${msg}`);
-      setIsRecording(false);
-    });
-
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      streamRef.current = stream;
-
-      const source = audioContext.createMediaStreamSource(stream);
-      sourceRef.current = source;
-
-      // Создаём ScriptProcessorNode с bufferSize = 4096
-      const processor = audioContext.createScriptProcessor(4096, 1, 1);
-      processorRef.current = processor;
-
-      processor.onaudioprocess = (event) => {
-        const inputBuffer = event.inputBuffer.getChannelData(0);
-        const pcm16 = floatTo16BitPCM(inputBuffer);
-
-        // Отправляем бинарные данные напрямую
-        socket.emit('audioData', pcm16.buffer);
-      };
-
-      source.connect(processor);
-      processor.connect(audioContext.destination);
-
-      setIsRecording(true);
-      setTranscript('');
-    } catch (err) {
-      console.error('Error accessing microphone:', err);
-      setError('Ошибка доступа к микрофону.');
-    }
-  };
-
-  const stopRecording = () => {
-    if (streamRef.current) {
-      streamRef.current.getTracks().forEach((track) => track.stop());
-    }
-
-    if (sourceRef.current) {
-      sourceRef.current.disconnect();
-    }
-
-    if (processorRef.current) {
-      processorRef.current.disconnect();
-    }
-
-    if (audioContextRef.current && audioContextRef.current.state !== 'closed') {
-      audioContextRef.current.close();
-    }
-
-    if (socketRef.current) {
-      socketRef.current.emit('stopRecognition');
-      socketRef.current.disconnect();
-      socketRef.current = null;
-    }
-
-    setIsRecording(false);
   };
 
   const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -184,21 +80,27 @@ export const MainPage = () => {
       setIsUploading(true);
       setUploadedFileName(file.name);
 
-      const arrayBuffer = await file.arrayBuffer();
-      const uint8Array = new Uint8Array(arrayBuffer);
-      const byteArray = Array.from(uint8Array);
-      console.log(uploadedFileName);
+      try {
+        const arrayBuffer = await file.arrayBuffer();
+        const uint8Array = new Uint8Array(arrayBuffer);
+        const byteArray = Array.from(uint8Array);
 
-      recognizeFile.mutate({ file: byteArray, model: selectedModel, filename: file.name });
+        const response = await recognizeFile.mutateAsync({
+          file: byteArray,
+          model: selectedModel,
+          filename: file.name
+        });
 
-      setIsUploading(false);
-      setTranscript(
-        `Распознанный текст из файла ${file.name}: Это пример текста, полученного из загруженного аудиофайла.`
-      );
+        setTranscript(`Распознанный текст из файла ${file.name}: ${response.transcript}`);
+      } catch (err) {
+        console.error('Error uploading file:', err);
+        setError('Ошибка загрузки файла.');
+      } finally {
+        setIsUploading(false);
+      }
     }
   };
 
-  // Функция для очистки транскрипта
   const clearTranscript = () => {
     setTranscript('');
   };
@@ -216,31 +118,27 @@ export const MainPage = () => {
           </CardTitle>
         </CardHeader>
         <CardContent className='p-6 space-y-6'>
-          {/* Блок выбора модели */}
           <div className='flex flex-col space-y-2'>
             <label htmlFor='model-select' className='text-sm font-medium text-foreground'>
               Выберите модель:
             </label>
-            <Select onValueChange={(value) => setSelectedModel(value)}>
+            <Select onValueChange={setSelectedModel}>
               <SelectTrigger className='w-full'>
                 <SelectValue placeholder='Выберите модель' />
               </SelectTrigger>
               <SelectContent>
-                {/* Добавьте ваши модели здесь */}
                 <SelectItem value='kk_telephony_16000'>kk_telephony_16000</SelectItem>
                 <SelectItem value='ru_telephony_16000'>ru_telephony_16000</SelectItem>
-                {/* и т.д. */}
               </SelectContent>
             </Select>
           </div>
 
-          {/* Отображение ошибок */}
+          {authError && <div className='text-red-500 text-sm'>{authError}</div>}
           {error && <div className='text-red-500 text-sm'>{error}</div>}
 
-          {/* Кнопки управления записью */}
           <div className='flex justify-center space-x-4'>
             <Button
-              onClick={isRecording ? stopRecording : startRecording}
+              onClick={isRecording ? stopTranscription : handleStartRecording}
               variant='default'
               size='icon'
               className='w-12 h-12 rounded-full'
@@ -250,23 +148,16 @@ export const MainPage = () => {
                 {isRecording ? <StopCircle size={20} /> : <Mic size={20} />}
               </motion.div>
             </Button>
+
             <Button
               onClick={triggerFileUpload}
-              style={{
-                width: '3rem',
-                height: '3rem',
-                borderRadius: '9999px',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                backgroundColor: '#1d4ed8',
-                color: '#ffffff',
-                border: 'none',
-                cursor: 'pointer'
-              }}
+              variant='default'
+              size='icon'
+              className='w-12 h-12 rounded-full bg-blue-600 text-white'
             >
               <Upload size={20} />
             </Button>
+
             <input
               type='file'
               ref={fileInputRef}
@@ -274,6 +165,7 @@ export const MainPage = () => {
               accept='audio/*'
               style={{ display: 'none' }}
             />
+
             <Button
               onClick={clearTranscript}
               variant='outline'
@@ -284,52 +176,27 @@ export const MainPage = () => {
             </Button>
           </div>
 
-          {/* Индикатор записи */}
-          {(isRecording || isUploading) && (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-              <div
-                style={{
-                  fontSize: '0.875rem',
-                  fontWeight: 500,
-                  textAlign: 'center',
-                  color: '#71717a'
-                }}
-              >
+          {isUploading && (
+            <div className='flex flex-col gap-2'>
+              <div className='text-sm font-medium text-gray-500 text-center'>
                 {isRecording ? 'Запись...' : 'Загрузка...'}
               </div>
-              <div
-                style={{
-                  width: '100%',
-                  height: '4px',
-                  backgroundColor: '#27272a',
-                  borderRadius: '9999px',
-                  overflow: 'hidden'
-                }}
-              >
+              <div className='w-full h-1 bg-gray-700 rounded-full overflow-hidden'>
                 <div
-                  style={{
-                    width: isUploading ? '100%' : `${progress}%`,
-                    height: '100%',
-                    backgroundColor: '#3b82f6',
-                    transition: 'width 0.3s ease-in-out',
-                    animation: isUploading ? 'pulse 1.5s infinite' : 'none'
-                  }}
+                  className={`h-full bg-blue-600 transition-all duration-300 ${
+                    isUploading ? 'animate-pulse w-full' : `w-1%`
+                  }`}
                 />
               </div>
             </div>
           )}
+
           {uploadedFileName && (
-            <div
-              style={{
-                fontSize: '0.875rem',
-                color: '#71717a',
-                textAlign: 'center'
-              }}
-            >
+            <div className='text-sm text-gray-500 text-center'>
               Загруженный файл: {uploadedFileName}
             </div>
           )}
-          {/* Текстовая область для транскрипта */}
+
           <Textarea
             value={transcript}
             placeholder='Здесь появится распознанный текст...'
