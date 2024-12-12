@@ -44,8 +44,8 @@ export const MainPage: React.FC = () => {
   });
 
   const handleStartRecording = async () => {
-    const username = 'antoniocra04@gmail.com';
-    const password = 'gonrag-kavXux-mohcu3';
+    const username = 'daniel@zakiyev.com';
+    const password = 'Qw12er34';
 
     if (!selectedModel) {
       setError('Пожалуйста, выберите модель перед началом записи.');
