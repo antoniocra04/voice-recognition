@@ -8,7 +8,6 @@ interface RecognitionConfig {
   model: string;
   file_name: string;
   enable_automatic_punctuation: boolean;
-  sil_after_word_timeout_ms: number;
   sample_rate: number;
 }
 

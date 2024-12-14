@@ -67,7 +67,6 @@ export const MainPage: React.FC = () => {
         model: selectedModel,
         file_name: 'session.wav',
         enable_automatic_punctuation: true,
-        sil_after_word_timeout_ms: 150,
         sample_rate: 16000
       },
       token
